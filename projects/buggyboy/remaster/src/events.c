@@ -342,8 +342,25 @@ void rm_event_dispatch(RmEventCtx *c, uint16_t idx, uint16_t slot, uint16_t flag
     case EV_RPM_COLLIDE:       rpm_collide(c); return;
     case EV_CURVE_FREEZE:      curve_freeze_evt(c); return;
     case EV_RPM_PENALTY:       rpm_penalty(c); return;
-    case EV_COMMON_COLLIDE:    common_collide(c); return;
-    case EV_DISP_FINISH:       if (or_gate(e->gate, flag_a, flag_b)) disp_finish(c, e->arg); return;
+    case EV_COMMON_COLLIDE:
+    if (c->player->collision_lock == 0) {
+        printf("COMMON COLLISION EVENT: idx=%u slot=%u speed=%u\n",
+               (unsigned)idx,
+               (unsigned)slot,
+               (unsigned)c->player->speed);
+    }
+    common_collide(c);
+    return;
+    case EV_DISP_FINISH:
+    if (or_gate(e->gate, flag_a, flag_b)) {
+        printf("FINISH EVENT: idx=%u type=0x%04X slot=%u speed=%u\n",
+               (unsigned)idx,
+               (unsigned)e->arg,
+               (unsigned)slot,
+               (unsigned)c->player->speed);
+        disp_finish(c, e->arg);
+    }
+    return;
     case EV_DISP_BONUS:
         if (or_gate(e->gate, flag_a, flag_b)) {
             if (e->gate == 0) disp_bonus(c, GU_DISP_TYPE_L, e->arg, GU_CURVE_STEP_L);
@@ -663,10 +680,26 @@ static void course_markers(RmEventCtx *c) {
 void rm_course_events(RmEventCtx *c) {
     uint8_t fx[FX_BLOCK_BYTES];
     build_fx_block(c, fx);                                     /* G */
+    if (fx[19] == 61) {
+    const CourseRow *band = &c->ring->row[GOBJ_FIXED_PASS_ROW];
+
+    printf("FINISH SOURCE: horizon=%u slot9=0x%04X slot14=0x%04X fx19=%u\n",
+           (unsigned)c->pose->horizon_row,
+           (unsigned)band->slot[9],
+           (unsigned)band->slot[14],
+           (unsigned)fx[19]);
+    }
     c->player->curve_freeze = 0;
 
     uint16_t horizon_row = (uint16_t)c->pose->horizon_row;     /* H: two horizon-keyed dispatches */
     uint16_t horizon_frac = (uint16_t)c->pose->horizon_frac;
+    if (fx[horizon_row + 1] == 49 ||
+    fx[(uint16_t)(horizon_row + 2) + 1] == 49) {
+    printf("COURSE FX: horizon=%u first=%u second=%u\n",
+           (unsigned)horizon_row,
+           (unsigned)fx[horizon_row + 1],
+           (unsigned)fx[(uint16_t)(horizon_row + 2) + 1]);
+    }
     uint8_t event = fx[horizon_row + 1];
     if (event != 0) rm_event_dispatch(c, event, horizon_row, horizon_frac, 0);
     event = fx[(uint16_t)(horizon_row + 2) + 1];

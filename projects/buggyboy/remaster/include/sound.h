@@ -216,7 +216,11 @@ typedef char snd_op_family_matches_dispatch_window[
 typedef struct {
     uint8_t header[SND_STATE_BYTES];               /* music header + effect voice + PSG staging (SND_*) */
     uint8_t voice[SND_VOICES][SND_VOICE_STRIDE];   /* the three voice-control records (SND_VC_*) */
+#if defined(_MSC_VER)
+} SoundState;
+#else
 } __attribute__((aligned(2))) SoundState;
+#endif
 
 /* Reset the driver to its power-on state (the two nonzero defaults + zeroed voices). */
 void rm_sound_reset(SoundState *s);

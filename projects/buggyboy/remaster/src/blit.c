@@ -15,6 +15,12 @@
 #include "st.h"
 #include "blit_const.h"   /* OBJSH_CELL_BYTES / OBJSH2_* — shared with src/asm/objshift2.S (F11) */
 
+#ifdef _MSC_VER
+#ifndef __attribute__
+#define __attribute__(x)
+#endif
+#endif
+
 /* MEASUREMENT ONLY (1 MB memory-diet slice 1, tools/reach_probe.c): shadow the two destination-write
  * accessors so every framebuffer byte these engines touch is recorded. wr16/wr32 in THIS file are
  * used for nothing but the destination columns, so the shim needs no filtering. Never defined for

@@ -18,6 +18,13 @@
  * 16-bit-faithful throughout: control low words wrap mod 2^16 and branches after a `.w` op test the
  * word sign — mirrored with (uint16_t)/(int16_t) casts, exactly as recreate does.
  */
+ 
+#ifdef _MSC_VER
+#include <stddef.h>
+#define __builtin_offsetof(type, member) offsetof(type, member)
+#define __attribute__(x)
+#endif
+
 #include "game.h"
 #include "screen.h"
 #include "st.h"

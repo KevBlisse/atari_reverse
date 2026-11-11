@@ -20,12 +20,19 @@ def write_if_changed(path, text):
 
 
 def c_array(name, data):
-    # aligned(2): the cores read these tables with be16/be32 (word/long moves), which fault on an odd
-    # address on the 68000. A plain uint8_t[] has no alignment guarantee, so pin it to an even base.
-    lines = [f"static const uint8_t {name}[{len(data)}] __attribute__((aligned(2))) = {{"]
+    # The original 68000 requires even alignment for word/long reads.
+    lines = [
+        "#if defined(_MSC_VER)",
+        "#define RM_FIXTURE_ALIGN2 __declspec(align(2))",
+        "#else",
+        "#define RM_FIXTURE_ALIGN2 __attribute__((aligned(2)))",
+        "#endif",
+        f"RM_FIXTURE_ALIGN2 static const uint8_t {name}[{len(data)}] = {{",
+    ]
     for i in range(0, len(data), 16):
         lines.append("    " + "".join(f"0x{b:02x}," for b in data[i:i + 16]))
     lines.append("};")
+    lines.append("#undef RM_FIXTURE_ALIGN2")
     return "\n".join(lines)
 
 

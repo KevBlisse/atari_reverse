@@ -73,7 +73,10 @@ void rm_scroll_draw(const ScrollGeometry *geo, const uint8_t *shifted, Framebuff
      * every store); it is a no-op on the host build. wr32 (not a raw store) keeps host byte order. */
     uint8_t *p = fb->px, *end = fb->px + OBJ_ROAD_START_OFF;
     Plane4 fill = ROAD_TOP_FILL;
+
+#ifndef _MSC_VER
     __asm__("" : "+r"(fill));
+#endif
     while (p < end) {
         wr32(p, fill);      wr32(p + 4, fill);  wr32(p + 8, fill);  wr32(p + 12, fill);
         wr32(p + 16, fill); wr32(p + 20, fill); wr32(p + 24, fill); wr32(p + 28, fill);
