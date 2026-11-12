@@ -36,6 +36,12 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
     objlist->view_parity = pfx->view_parity;         /* the dispatcher (handler_lo) reads the advanced parity */
     objlist->bonus_timer = pfx->bonus_timer;
     objlist->p24_flag = sc->hud_text[RM_HUD_P24_DIGIT_OFF];
+#ifdef BB_TRACE_P24
+    /* Temporary gantry diagnosis: exercise the special P24 graphic branch
+       at the first checkpoint, without altering the actual HUD leg digit. */
+    if (objlist->p24_flag == 0x32)
+        objlist->p24_flag = 0x31;
+#endif
     objlist->px = fb->px;                            /* the dispatcher's draw target: this frame's buffer */
     rm_build_road_geometry(sc->pose, sc->src, sc->ring, sc->ctrl, sc->scanline);
     sc->road->width_tbl = sc->ctrl + RM_CTRL_WIDTH_OFF;
