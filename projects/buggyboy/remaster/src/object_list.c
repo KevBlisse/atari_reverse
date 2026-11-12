@@ -297,7 +297,7 @@ static void objshift2_glue(const ObjListCtx *c, uint16_t x, uint16_t rows, uint3
                           (uint16_t)(x + OBJSH2P_SUBCELL_X * i), rows, /*width_idx=*/0);
 }
 
-static void obj_handler_p24(const ObjListCtx *c, uint16_t x, uint16_t rows_m1, uint32_t src) {
+static void obj_handler_p24_impl(const ObjListCtx *c, uint16_t x, uint16_t rows_m1, uint32_t src) {
     uint32_t dp = objshift2_prefix_dst(c, rows_m1);
     if (c->p24_flag == OBJ_P24_FLAG_ON) {
         RM_BLIT_OBJSHIFT2(c->px, dp, c->buf_c, src, x, OBJ_P24_ROWS_M1, /*width_idx=*/0);   /* stage 1 */
@@ -314,6 +314,47 @@ static void obj_handler_p24(const ObjListCtx *c, uint16_t x, uint16_t rows_m1, u
                           (uint16_t)(x + OBJSH2P_SUBCELL_X * (4 + 1)), OBJ_P24_ROWS_M1, 2);
     }
 }
+
+
+#ifdef BB_TRACE_P24
+/* Windows-only investigation. Observe the complete handler, including
+ * whether its blits alter visible Atari framebuffer bytes. */
+#include <stdio.h>
+#include <string.h>
+static void obj_handler_p24(const ObjListCtx *c, uint16_t x, uint16_t rows_m1, uint32_t src) {
+    static unsigned calls;
+    static uint8_t before[32000];
+    const unsigned call = ++calls;
+    const int trace = call <= 16;
+    const uint32_t dst = objshift2_prefix_dst(c, rows_m1);
+    if (trace) {
+        memcpy(before, c->px, sizeof before);
+        printf("P24 ENTER call=%u x=%u rows=%u src=%08X dst=%u view=%04X flag=%02X branch=%s\\n",
+               call, (unsigned)x, (unsigned)rows_m1, (unsigned)src,
+               (unsigned)dst, (unsigned)c->view_flags, (unsigned)c->p24_flag,
+               c->p24_flag == OBJ_P24_FLAG_ON ? "on" : "off");
+    }
+    obj_handler_p24_impl(c, x, rows_m1, src);
+    if (trace) {
+        unsigned changed = 0;
+        int first = -1, last = -1;
+        for (unsigned i = 0; i < sizeof before; ++i) {
+            if (before[i] != c->px[i]) {
+                ++changed;
+                if (first < 0) first = (int)i;
+                last = (int)i;
+            }
+        }
+        printf("P24 RESULT call=%u changed=%u first=%d last=%d\\n",
+               call, changed, first, last);
+        fflush(stdout);
+    }
+}
+#else
+static void obj_handler_p24(const ObjListCtx *c, uint16_t x, uint16_t rows_m1, uint32_t src) {
+    obj_handler_p24_impl(c, x, rows_m1, src);
+}
+#endif
 
 /* P-prefix + glue(g) + optional final blit (P26..P38). rows/glue-groups/final width per handler:
  * `rows` is the objshift2 leaf's rows_m1 (dbf seed), `final_wi` < 0 means no final blit. */
