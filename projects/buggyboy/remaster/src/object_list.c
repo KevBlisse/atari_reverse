@@ -444,6 +444,21 @@ void rm_draw_object_list(const ObjListCtx *c, const uint8_t *list, uint32_t list
 #endif
     list_off = (uint32_t)(list_off + sx16((uint16_t)c->obj_scan_off));    /* adda.w obj_scan_off,a5 */
 
+#ifdef BB_TRACE_P24
+    /* Observe the REAL fixed-pass flag bytes at the point of dispatch.
+       This distinguishes the live CourseRing from its serialized flag stream. */
+    if (outer_rows_m1 == 0 && rec_off == 0) {
+        static unsigned fixed_calls;
+        if (++fixed_calls <= 4) {
+            printf("FIXED PASS call=%u scan=%d view=%04X flags=",
+                   fixed_calls, (int)c->obj_scan_off, (unsigned)c->view_flags);
+            for (unsigned slot = 0; slot < 15; ++slot)
+                printf(" %04X", (unsigned)be16(flags + flags_off + slot * 2));
+            putchar(10);
+            fflush(stdout);
+        }
+    }
+#endif
     int outer = (int16_t)outer_rows_m1 + 1;
     for (int oi = 0; oi < outer; oi++) {
         uint32_t row_dst = (uint32_t)(c->draw_buf + sx16(be16(list + list_off))); list_off += 2;
