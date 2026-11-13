@@ -59,13 +59,13 @@ def convert(bundle, baseline):
     frame, view, parity, bonus, scan, p24 = struct.unpack("<6I", sections["META"])
     write(img, buf_a, sections["BUFA"])
     write(img, buf_c, sections["BUFC"])
-    write(img, adapter.A_obj_list_base, sections["LIST"])
-    write(img, adapter.A_ring_base, sections["FLAG"])
-    write(img, adapter.A_obj_xoff_tbl, sections["XOFF"])
-    write(img, adapter.A_color_pairs, sections["COLR"])
-    write(img, adapter.A_obj_view_xform, sections["VIEW"])
-    write(img, adapter.A_objsh2p_tbl, sections["PFXT"])
-    write(img, adapter.A_obj_type_jumptable, sections["JUMP"])
+    # These are immutable program tables. Never overwrite neighbouring globals\n    # with a generous diagnostic read: require them to match the oracle image.\n    for tag, off in [("LIST", adapter.A_obj_list_base),\n                     ("COLR", adapter.A_color_pairs),\n                     ("VIEW", adapter.A_obj_view_xform),\n                     ("PFXT", adapter.A_objsh2p_tbl),\n                     ("JUMP", adapter.A_obj_type_jumptable)]:\n        data = sections[tag]\n        if img[off:off + len(data)] != data:\n            raise ValueError(f"{tag} static table differs from prepared Atari reference")
+    if len(sections["FLAG"]) != 14 * 32:\n        raise ValueError("invalid serialized ring grid")\n    write(img, adapter.A_ring_base, sections["FLAG"])
+    # Road control table: 106 longs plus 8-byte spill; xoff begins 42\n    # bytes into it. Older BBCAP01 files contain an overlong 1024-byte\n    # diagnostic read; retain only the allocated 390-byte region.\n    xoff_size = 106 * 4 + 8 - 0x28 - 2\n    if len(sections["XOFF"]) < xoff_size:\n        raise ValueError("truncated XOFF control table")\n    write(img, adapter.A_obj_xoff_tbl, sections["XOFF"][:xoff_size])
+
+
+
+
     write(img, adapter.SCREEN_BASE, sections["FB00"])
     for off, val in [(adapter.A_view_flags, view),
                      (adapter.A_view_parity, parity),
