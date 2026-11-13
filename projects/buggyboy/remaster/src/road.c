@@ -18,6 +18,12 @@
  * 16-bit-faithful throughout: control low words wrap mod 2^16 and branches after a `.w` op test the
  * word sign — mirrored with (uint16_t)/(int16_t) casts, exactly as recreate does.
  */
+#include <stddef.h>
+#if defined(_MSC_VER)
+#define RM_UNUSED
+#else
+#define RM_UNUSED __attribute__((unused))
+#endif
 #include "game.h"
 #include "screen.h"
 #include "st.h"
@@ -43,17 +49,17 @@ typedef struct {
 /* Pin road_const.h's RR_OFF_* to the real struct layout on the 32-bit target, so road_band.S reads the
  * right fields. The `sizeof(void*) != 4 ||` short-circuit disables the check on the 64-bit host (whose
  * 8-byte-pointer layout differs and never meets the asm) and enforces it on the m68k target. */
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, dst)        == RR_OFF_DST,        "RR_OFF_DST");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, tex)        == RR_OFF_TEX,        "RR_OFF_TEX");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, param)      == RR_OFF_PARAM,      "RR_OFF_PARAM");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, width)      == RR_OFF_WIDTH,      "RR_OFF_WIDTH");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, edge)       == RR_OFF_EDGE,       "RR_OFF_EDGE");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, edge_const) == RR_OFF_EDGE_CONST, "RR_OFF_EDGE_CONST");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, stride)     == RR_OFF_STRIDE,     "RR_OFF_STRIDE");
-_Static_assert(sizeof(void *) != 4 || __builtin_offsetof(rr_regs, d7)         == RR_OFF_D7,         "RR_OFF_D7");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, dst)        == RR_OFF_DST,        "RR_OFF_DST");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, tex)        == RR_OFF_TEX,        "RR_OFF_TEX");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, param)      == RR_OFF_PARAM,      "RR_OFF_PARAM");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, width)      == RR_OFF_WIDTH,      "RR_OFF_WIDTH");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, edge)       == RR_OFF_EDGE,       "RR_OFF_EDGE");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, edge_const) == RR_OFF_EDGE_CONST, "RR_OFF_EDGE_CONST");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, stride)     == RR_OFF_STRIDE,     "RR_OFF_STRIDE");
+_Static_assert(sizeof(void *) != 4 || offsetof(rr_regs, d7)         == RR_OFF_D7,         "RR_OFF_D7");
 /* road_band.S uses the fb pointer (rr_regs.fb, RR_OFF_FB) directly as the pixel base — valid because
  * Framebuffer is just its px[] array; pin that so a future field before px can't silently shift it. */
-_Static_assert(__builtin_offsetof(Framebuffer, px) == 0, "fb pointer must equal &fb->px[0]");
+_Static_assert(offsetof(Framebuffer, px) == 0, "fb pointer must equal &fb->px[0]");
 
 /* ---- 68000 word-op helpers (word ops touch only the low 16 bits, then branch on bit 15) ---- */
 static inline uint32_t rr_wset(uint32_t r, uint16_t low) { return (r & 0xffff0000u) | low; }
@@ -218,7 +224,7 @@ static void rr_band_A_interior_center(uint8_t **dst, const uint8_t **src, int16_
  * hand-m68k core (rr_band_A_asm) reached via RR_BAND_A_FN; test/test_asm_road.py pins the two byte-identical.
  * With band A now asm too, rm_render_road inlines NO band — the +17k band-A de-inline tax that slices 1-3
  * carried is gone (nothing left to de-inline), so the always_inline it needed goes away with this port. */
-static __attribute__((unused)) void rr_band_A_c(rr_regs *r) {
+static RM_UNUSED void rr_band_A_c(rr_regs *r) {
     Framebuffer *fb = r->fb;
     const int16_t stride = r->stride;
     uint32_t rows = RR_ROWS_A;                        /* 96 scanlines (dbf seed) */
@@ -334,7 +340,7 @@ static __attribute__((unused)) void rr_band_A_c(rr_regs *r) {
  * pins the two byte-identical under Musashi. `unused`: the shipping asm build reaches band B through the
  * asm and never calls this, but keeping it compiled (as blit.c/objshift2.S do) is what makes the A/B clean.
  * ===================================================================================== */
-static __attribute__((unused)) void rr_band_B_c(rr_regs *r, uint32_t rows_m1, int second) {
+static RM_UNUSED void rr_band_B_c(rr_regs *r, uint32_t rows_m1, int second) {
     Framebuffer *fb = r->fb;
     const int16_t stride = r->stride;
     const uint16_t col_mask = r->d7;  /* column-align mask (68k d7) */
@@ -465,7 +471,7 @@ static __attribute__((unused)) void rr_band_B_c(rr_regs *r, uint32_t rows_m1, in
  * PERF30 road-asm slice 3 ships a hand-m68k core (rr_band_C_near_asm) reached via RR_BAND_C_NEAR_FN;
  * test/test_asm_road.py pins the two byte-identical under Musashi.
  * ===================================================================================== */
-static __attribute__((unused)) void rr_band_C_near_c(rr_regs *r, uint32_t rows_m1) {
+static RM_UNUSED void rr_band_C_near_c(rr_regs *r, uint32_t rows_m1) {
     Framebuffer *fb = r->fb;
     const int16_t stride = r->stride;
     uint32_t remaining = rows_m1;
@@ -575,7 +581,7 @@ static __attribute__((unused)) void rr_band_C_near_c(rr_regs *r, uint32_t rows_m
  * rr_band_C_far_c is the byte-exact C REFERENCE (always compiled, `unused` in the shipping asm build);
  * rr_band_C_far_asm is the slice-3 hand-m68k core (RR_BAND_C_FAR_FN), pinned by test/test_asm_road.py.
  * ===================================================================================== */
-static __attribute__((unused)) void rr_band_C_far_c(rr_regs *r, uint32_t rows_m1) {
+static RM_UNUSED void rr_band_C_far_c(rr_regs *r, uint32_t rows_m1) {
     Framebuffer *fb = r->fb;
     const int16_t stride = r->stride;
     uint32_t remaining = rows_m1;
@@ -731,7 +737,7 @@ static __attribute__((unused)) void rr_band_C_far_c(rr_regs *r, uint32_t rows_m1
  * byte-identical under Musashi. `unused`: the shipping asm build reaches band D through rr_band_D_asm and
  * never calls this, but keeping it compiled (measured: no perf effect) is what makes the A/B clean.
  * ===================================================================================== */
-static __attribute__((unused)) void rr_band_D_c(rr_regs *r, uint32_t rows_m1, int second) {
+static RM_UNUSED void rr_band_D_c(rr_regs *r, uint32_t rows_m1, int second) {
     Framebuffer *fb = r->fb;
     const int16_t stride = r->stride;
     /* Localize the band cursors (same aliasing reason as rr_band_B): write back at return. */
