@@ -39,7 +39,7 @@ static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
             for (unsigned b = 0; b < 8; ++b) {
                 unsigned off = y * SCREEN_ROW_BYTES + g * 8 + b;
                 if (bb_before[off] == fb->px[off]) continue;
-                if (changed < 3)
+                if (changed < 3 && (bb_frame % 5 == 0 || bb_frame == 1384))
                     fprintf(stderr, "  off=%u y=%u xgroup=%u %02X->%02X\n",
                             off, y, g, bb_before[off], fb->px[off]);
                 if (off < first) first = off;
@@ -50,10 +50,12 @@ static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
     fprintf(stderr, "[GANTRY] frame=%u stage=%s p24=%02X changed=%u first=%u last=%u\n",
             bb_frame, stage, p24, changed, changed ? first : 0, changed ? last : 0);
 }
-#define BB_BEFORE() bb_snapshot(fb)
+#define BB_BEFORE() ((void)0)
+#define BB_FIXED_BEFORE() do { if (bb_frame >= 1300 && bb_frame <= 1600) bb_snapshot(fb); } while (0)
 #define BB_AFTER(name) bb_diff(fb, name, objlist->p24_flag)
 #else
 #define BB_BEFORE() ((void)0)
+#define BB_FIXED_BEFORE() ((void)0)
 #define BB_AFTER(name) ((void)0)
 #endif
 
@@ -136,14 +138,14 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
                             (uint16_t)(GOBJ_D6_INIT - count * GOBJ_D6_ROW_STEP), 0);
     BB_AFTER("object_pass_2");
     if ((objlist->view_flags & GOBJ_VIEW_REAR) == 0) {   /* pass 3 (fixed) + buggy, view-ordered */
-        BB_BEFORE();
+        BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
         BB_AFTER("fixed_objects");
         BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
     } else {
         BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
-        BB_BEFORE();
+        BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
         BB_AFTER("fixed_objects");
