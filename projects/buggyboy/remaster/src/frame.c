@@ -60,6 +60,63 @@ static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
 #endif
 
 
+/* Windows-only, opt-in fixed-object gantry capture. The output is a tagged
+ * native-state bundle, NOT an Atari flat image: pointer addresses are never
+ * serialized as though they were 68000 addresses. The converter must validate
+ * and relocate every section before feeding the oracle. */
+#if defined(_WIN32)
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "assets.h"
+static void bb_capture_chunk(FILE *f, const char tag[4], const void *p, uint32_t n) {
+    unsigned char header[8] = {
+        (unsigned char)tag[0], (unsigned char)tag[1],
+        (unsigned char)tag[2], (unsigned char)tag[3],
+        (unsigned char)n, (unsigned char)(n >> 8),
+        (unsigned char)(n >> 16), (unsigned char)(n >> 24)
+    };
+    fwrite(header, 1, sizeof header, f);
+    fwrite(p, 1, n, f);
+}
+static void bb_capture_fixed(const RmScene *sc, const Framebuffer *fb) {
+    static unsigned frame;
+    ++frame;
+    const char *dir = getenv("BB_GANTRY_CAPTURE_DIR");
+    if (!dir || !*dir) return;
+    if (frame < 1300 || frame > 1600 || frame % 10 != 0) return;
+    char path[1024];
+    int n = snprintf(path, sizeof path, "%s/gantry_%04u.bbcap", dir, frame);
+    if (n <= 0 || (size_t)n >= sizeof path) return;
+    FILE *f = fopen(path, "wb");
+    if (!f) { fprintf(stderr, "GANTRY CAPTURE: cannot open %s\\n", path); return; }
+    const unsigned char magic[8] = {'B','B','C','A','P','0','1',0};
+    fwrite(magic, 1, sizeof magic, f);
+    uint32_t scalars[6] = {frame, sc->objlist->view_flags,
+        sc->objlist->view_parity, sc->objlist->bonus_timer,
+        (uint16_t)sc->objlist->obj_scan_off, sc->objlist->p24_flag};
+    bb_capture_chunk(f, "META", scalars, sizeof scalars);
+    bb_capture_chunk(f, "FB00", fb->px, SCREEN_BYTES);
+    /* Arena sizes are defined by assets.h; this includes every record and
+     * graphics offset reachable by the fixed-object dispatcher. */
+    bb_capture_chunk(f, "BUFA", sc->objlist->buf_a,
+                     RM_GFX_OFF - RM_TABLES_OFF);
+    bb_capture_chunk(f, "BUFC", sc->objlist->buf_c,
+                     RM_AUX_OFF - RM_GFX_OFF);
+    bb_capture_chunk(f, "LIST", sc->obj_fixed_list, 512);
+    bb_capture_chunk(f, "FLAG", sc->ring_st, RM_RING_ROWS * RM_RING_ROW_BYTES);
+    bb_capture_chunk(f, "XOFF", sc->objlist->xoff_tbl, 1024);
+    bb_capture_chunk(f, "COLR", sc->objlist->color_pairs, 128);
+    bb_capture_chunk(f, "VIEW", sc->objlist->view_xform, 256);
+    bb_capture_chunk(f, "PFXT", sc->objlist->objsh2p_tbl, 256);
+    bb_capture_chunk(f, "JUMP", sc->objlist->jumptable, 256);
+    if (fclose(f) != 0) fprintf(stderr, "GANTRY CAPTURE: write failed %s\\n", path);
+    else fprintf(stderr, "GANTRY CAPTURE: %s\\n", path);
+}
+#else
+#define bb_capture_fixed(sc, fb) ((void)0)
+#endif
+
 /* UNIFIED ST/STE binary (PERF30 C5 slice 1): route the road fine-scroll through rm_blit_road_scroll_fn —
  * a function pointer bound ONCE at boot (rm_blit_bind_all) to the hardware-blitter dispatch when a
  * blitter is present, else left at the C reference. The seam lives HERE, at the sole call site, and not
@@ -138,6 +195,7 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
                             (uint16_t)(GOBJ_D6_INIT - count * GOBJ_D6_ROW_STEP), 0);
     BB_AFTER("object_pass_2");
     if ((objlist->view_flags & GOBJ_VIEW_REAR) == 0) {   /* pass 3 (fixed) + buggy, view-ordered */
+        bb_capture_fixed(sc, fb);
         BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
@@ -145,6 +203,7 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
         BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
     } else {
         BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
+        bb_capture_fixed(sc, fb);
         BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
