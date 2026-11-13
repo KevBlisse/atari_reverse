@@ -132,6 +132,15 @@ static void bb_capture_state(const RmScene *sc, const Framebuffer *fb,
 #define RM_BLIT_ROAD_SCROLL rm_blit_road_scroll
 #endif
 
+
+/* Read-only sprite dispatch tracing. Windows diagnostic only. */
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+void bb_trace_sprite_context(unsigned frame, const char *pass);
+#define BB_SPRITE_CONTEXT(frame, pass) bb_trace_sprite_context((frame), (pass))
+#else
+#define BB_SPRITE_CONTEXT(frame, pass) ((void)0)
+#endif
+
 void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
 #if defined(_WIN32)
     static unsigned bb_capture_frame;
@@ -182,6 +191,7 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
      * walk the serialized grid from row 1, the fixed pass from row 12 — the same aliasing the original
      * gets from pointing into its flat row grid. */
     int count = rm_ring_sprite_count(sc->ring);
+    BB_SPRITE_CONTEXT(bb_capture_frame, "pass1");
     /* Capture the input to pass 1 before any variable-object drawing. */
     bb_capture_state(sc, fb, bb_capture_frame, "pre_objects");
     BB_BEFORE();
@@ -190,10 +200,13 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
                             sc->ring_st + GOBJ_SPRITE_PASS_ROW * RM_RING_ROW_BYTES, 0,
                             (uint16_t)(count - 1), GOBJ_D6_INIT, (uint16_t)count);
     BB_AFTER("object_pass_1");
+    bb_capture_state(sc, fb, bb_capture_frame, "after_pass1");
 #if defined(GAME_DUMP_STAGE) && GAME_DUMP_STAGE == 3
     return;
 #endif
     BB_BEFORE(); rm_draw_object(sc->object, fb); BB_AFTER("scaled_object");
+    BB_SPRITE_CONTEXT(bb_capture_frame, "pass2");
+    bb_capture_state(sc, fb, bb_capture_frame, "after_scaled");
     BB_BEFORE();
     if (GOBJ_SPRITE_LAST - count >= 0)               /* pass 2: the remaining rows */
         rm_draw_object_list(objlist, sc->obj_sprite_disp, (uint16_t)(count * GOBJ_ROW_A5_STRIDE),
@@ -202,6 +215,8 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
                             (uint16_t)(GOBJ_SPRITE_LAST - count),
                             (uint16_t)(GOBJ_D6_INIT - count * GOBJ_D6_ROW_STEP), 0);
     BB_AFTER("object_pass_2");
+    bb_capture_state(sc, fb, bb_capture_frame, "after_pass2");
+    BB_SPRITE_CONTEXT(bb_capture_frame, "fixed");
     if ((objlist->view_flags & GOBJ_VIEW_REAR) == 0) {   /* pass 3 (fixed) + buggy, view-ordered */
         bb_capture_state(sc, fb, bb_capture_frame, "pre_fixed");
         BB_FIXED_BEFORE();

@@ -351,12 +351,57 @@ static void obj_handler_p_glue(const ObjListCtx *c, uint16_t x, uint16_t rows_m1
 }
 
 /* ---- the jump-table dispatch ---- */
+
+/* Windows-only read-only trace: records every object dispatcher call on sampled
+ * approach frames, including special records. Never modifies drawing parameters. */
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#include <stdio.h>
+#include <stdlib.h>
+static FILE *bb_sprite_trace_file;
+static int bb_sprite_trace_initialized;
+static unsigned bb_sprite_trace_frame;
+static const char *bb_sprite_trace_pass = "unset";
+void bb_trace_sprite_context(unsigned frame, const char *pass) {
+    bb_sprite_trace_frame = frame;
+    bb_sprite_trace_pass = pass;
+    if (!bb_sprite_trace_initialized) {
+        const char *path = getenv("BB_GANTRY_SPRITE_TRACE");
+        bb_sprite_trace_initialized = 1;
+        if (path && *path) {
+            bb_sprite_trace_file = fopen(path, "w");
+            if (bb_sprite_trace_file) {
+                fputs("frame,pass,view,p24,parity,scan,jumpidx,target,src,dst,x,rows,colour,rec_cursor\n", bb_sprite_trace_file);
+                fflush(bb_sprite_trace_file); /* Header is saved immediately; no invalid setvbuf call. */
+            } else fprintf(stderr, "GANTRY TRACE: cannot open %s\n", path);
+        }
+    }
+}
+static void bb_trace_sprite_dispatch(const ObjListCtx *c, uint16_t jumpidx, uint32_t target,
+                                     uint16_t x, uint16_t colour, uint16_t rows,
+                                     uint32_t dst, uint32_t src, uint32_t rec_cursor) {
+    unsigned frame = bb_sprite_trace_frame;
+    /* Sample every tenth frame for the entire drive; no assumed crossing times. */
+    if (!bb_sprite_trace_file || (frame % 10) != 0) return;
+    fprintf(bb_sprite_trace_file,
+            "%u,%s,%u,%u,%u,%u,0x%04X,0x%05X,0x%08X,0x%08X,%u,%u,%u,0x%08X\n",
+            frame, bb_sprite_trace_pass, (unsigned)c->view_flags, (unsigned)c->p24_flag,
+            (unsigned)c->view_parity, (unsigned)c->obj_scan_off,
+            (unsigned)jumpidx, (unsigned)target, (unsigned)src, (unsigned)dst,
+            (unsigned)x, (unsigned)rows, (unsigned)colour, (unsigned)rec_cursor);
+}
+#define BB_TRACE_SPRITE_DISPATCH(c,j,t,x,col,rows,dst,src,rec) \
+    bb_trace_sprite_dispatch(c,j,t,x,col,rows,dst,src,rec)
+#else
+#define BB_TRACE_SPRITE_DISPATCH(c,j,t,x,col,rows,dst,src,rec) ((void)0)
+#endif
+
 static void obj_dispatch(const ObjListCtx *c, uint16_t jumpidx, uint16_t x, uint16_t colour,
                          uint16_t rows_m1, uint32_t dst, uint32_t src, uint32_t rec_cursor,
                          uint16_t voff, const uint8_t *xoff, uint32_t xoff_off,
                          const uint8_t *list, uint32_t list_off) {
     int16_t off = (int16_t)be16(c->jumptable + jumpidx);
     uint32_t target = (uint32_t)(JUMPTABLE_BASE + off);
+    BB_TRACE_SPRITE_DISPATCH(c, jumpidx, target, x, colour, rows_m1, dst, src, rec_cursor);
     switch (target) {
         case OBJ_H_NOOP: break;
         case OBJ_H_T1:  osp(c, x, rows_m1, dst, src, 3); break;
