@@ -222,6 +222,7 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
         BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
+        bb_capture_state(sc, fb, bb_capture_frame, "post_fixed");
         BB_AFTER("fixed_objects");
         BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
     } else {
@@ -230,6 +231,7 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
         BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
+        bb_capture_state(sc, fb, bb_capture_frame, "post_fixed");
         BB_AFTER("fixed_objects");
     }
 
