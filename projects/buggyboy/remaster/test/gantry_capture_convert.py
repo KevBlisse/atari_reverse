@@ -59,9 +59,26 @@ def convert(bundle, baseline):
     frame, view, parity, bonus, scan, p24 = struct.unpack("<6I", sections["META"])
     write(img, buf_a, sections["BUFA"])
     write(img, buf_c, sections["BUFC"])
-    # These are immutable program tables. Never overwrite neighbouring globals\n    # with a generous diagnostic read: require them to match the oracle image.\n    for tag, off in [("LIST", adapter.A_obj_list_base),\n                     ("COLR", adapter.A_color_pairs),\n                     ("VIEW", adapter.A_obj_view_xform),\n                     ("PFXT", adapter.A_objsh2p_tbl),\n                     ("JUMP", adapter.A_obj_type_jumptable)]:\n        data = sections[tag]\n        if img[off:off + len(data)] != data:\n            raise ValueError(f"{tag} static table differs from prepared Atari reference")
-    if len(sections["FLAG"]) != 14 * 32:\n        raise ValueError("invalid serialized ring grid")\n    write(img, adapter.A_ring_base, sections["FLAG"])
-    # Road control table: 106 longs plus 8-byte spill; xoff begins 42\n    # bytes into it. Older BBCAP01 files contain an overlong 1024-byte\n    # diagnostic read; retain only the allocated 390-byte region.\n    xoff_size = 106 * 4 + 8 - 0x28 - 2\n    if len(sections["XOFF"]) < xoff_size:\n        raise ValueError("truncated XOFF control table")\n    write(img, adapter.A_obj_xoff_tbl, sections["XOFF"][:xoff_size])
+    # These are immutable program tables. Never overwrite neighbouring globals
+    # with a generous diagnostic read: require them to match the oracle image.
+    for tag, off in [("LIST", adapter.A_obj_list_base),
+                     ("COLR", adapter.A_color_pairs),
+                     ("VIEW", adapter.A_obj_view_xform),
+                     ("PFXT", adapter.A_objsh2p_tbl),
+                     ("JUMP", adapter.A_obj_type_jumptable)]:
+        data = sections[tag]
+        if img[off:off + len(data)] != data:
+            raise ValueError(f"{tag} static table differs from prepared Atari reference")
+    if len(sections["FLAG"]) != 14 * 32:
+        raise ValueError("invalid serialized ring grid")
+    write(img, adapter.A_ring_base, sections["FLAG"])
+    # Road control table: 106 longs plus 8-byte spill; xoff begins 42
+    # bytes into it. Older BBCAP01 files contain an overlong 1024-byte
+    # diagnostic read; retain only the allocated 390-byte region.
+    xoff_size = 106 * 4 + 8 - 0x28 - 2
+    if len(sections["XOFF"]) < xoff_size:
+        raise ValueError("truncated XOFF control table")
+    write(img, adapter.A_obj_xoff_tbl, sections["XOFF"][:xoff_size])
 
 
 
