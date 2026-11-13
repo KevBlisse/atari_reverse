@@ -105,7 +105,7 @@ static void bb_capture_fixed(const RmScene *sc, const Framebuffer *fb) {
                      RM_AUX_OFF - RM_GFX_OFF);
     bb_capture_chunk(f, "LIST", sc->obj_fixed_list, 512);
     bb_capture_chunk(f, "FLAG", sc->ring_st, RM_RING_ROWS * RM_RING_ROW_BYTES);
-    bb_capture_chunk(f, "XOFF", sc->objlist->xoff_tbl, 1024);
+    bb_capture_chunk(f, "XOFF", sc->objlist->xoff_tbl,\n                     RM_CTRL_ALLOC_BYTES - RM_CTRL_WIDTH_OFF - 2);
     bb_capture_chunk(f, "COLR", sc->objlist->color_pairs, 128);
     bb_capture_chunk(f, "VIEW", sc->objlist->view_xform, 256);
     bb_capture_chunk(f, "PFXT", sc->objlist->objsh2p_tbl, 256);
