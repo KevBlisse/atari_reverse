@@ -57,6 +57,14 @@ def convert(bundle, baseline):
     if draw_buf != adapter.SCREEN_BASE:
         raise ValueError("baseline draw buffer differs from SCREEN_BASE; cannot safely compare")
     frame, view, parity, bonus, scan, p24 = struct.unpack("<6I", sections["META"])
+    # The fixed-list cursor starts at obj_scan_off, not at LIST[0].
+    # Legacy 512-byte captures silently borrowed the tail from an unrelated
+    # reference frame, producing a vacuous footprint=0/diff=0 result.
+    scan_signed = scan if scan < 0x8000 else scan - 0x10000
+    if scan_signed < 0 or scan_signed + 4 + 15 * 2 > len(sections["LIST"]):
+        raise ValueError(
+            f"LIST capture too short for obj_scan_off={scan_signed}: "
+            f"{len(sections['LIST'])} bytes; rebuild and recapture with 1024-byte LIST")
     write(img, buf_a, sections["BUFA"])
     write(img, buf_c, sections["BUFC"])
     # These are immutable program tables. Never overwrite neighbouring globals
