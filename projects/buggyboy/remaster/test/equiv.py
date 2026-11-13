@@ -825,6 +825,46 @@ def compare_object_list(lib, image):
     return diff, footprint
 
 
+def diagnose_fixed_object_pass(image):
+    """Report the reference renderer's actual writes, including off-screen writes.
+
+    This is deliberately separate from the equivalence assertion: an empty
+    visible framebuffer footprint is not evidence of an empty object pass.
+    """
+    assert len(image) == bench_frame.IMAGE_SIZE
+    flip = _r16(image, adapter.A_flip_idx)
+    draw_buf = int.from_bytes(
+        image[adapter.A_physbase_tbl + flip:adapter.A_physbase_tbl + flip + 4], "big")
+    _, passes = _objlist_passes(image)
+    list_off, flags_off, outer, rec_off, colour = passes[2]
+    scan = _s16(image, adapter.A_obj_scan_off)
+    cursor = list_off + scan
+    flags = [int.from_bytes(image[flags_off + i:flags_off + i + 2], "big")
+             for i in range(0, 32, 2)]
+    before = bytes(image)
+    ref = bytearray(image)
+    fn = bench_frame.harness._lib.g_draw_object_list
+    fn.argtypes = [ctypes.POINTER(ctypes.c_uint8)] + [ctypes.c_uint32] * 6
+    fn.restype = None
+    fn((ctypes.c_uint8 * bench_frame.IMAGE_SIZE).from_buffer(ref),
+       list_off, flags_off, draw_buf, outer, rec_off, colour)
+    changed = [i for i, (a, b) in enumerate(zip(before, ref)) if a != b]
+    spans = []
+    for addr in changed:
+        if spans and addr == spans[-1][1] + 1:
+            spans[-1] = (spans[-1][0], addr)
+        else:
+            spans.append((addr, addr))
+    return dict(draw_buf=draw_buf, flip=flip, scan=scan, cursor=cursor,
+                list_header=before[cursor:cursor + 12].hex(),
+                flags=[f"{x:04x}" for x in flags],
+                total_changed=len(changed),
+                framebuffer_changed=sum(adapter.SCREEN_BASE <= i <
+                                        adapter.SCREEN_BASE + adapter.SCREEN_BYTES
+                                        for i in changed),
+                first_spans=spans[:12])
+
+
 def compare_fixed_object_pass(lib, image):
     """Compare the *single fixed-object pass* at the supplied pre-pass state.
 
