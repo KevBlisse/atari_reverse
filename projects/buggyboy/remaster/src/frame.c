@@ -79,14 +79,13 @@ static void bb_capture_chunk(FILE *f, const char tag[4], const void *p, uint32_t
     fwrite(header, 1, sizeof header, f);
     fwrite(p, 1, n, f);
 }
-static void bb_capture_fixed(const RmScene *sc, const Framebuffer *fb) {
-    static unsigned frame;
-    ++frame;
+static void bb_capture_state(const RmScene *sc, const Framebuffer *fb,
+                             unsigned frame, const char *suffix) {
     const char *dir = getenv("BB_GANTRY_CAPTURE_DIR");
     if (!dir || !*dir) return;
     if (frame < 1300 || frame > 1600 || frame % 10 != 0) return;
     char path[1024];
-    int n = snprintf(path, sizeof path, "%s/gantry_%04u.bbcap", dir, frame);
+    int n = snprintf(path, sizeof path, "%s/gantry_%04u_%s.bbcap", dir, frame, suffix);
     if (n <= 0 || (size_t)n >= sizeof path) return;
     FILE *f = fopen(path, "wb");
     if (!f) { fprintf(stderr, "GANTRY CAPTURE: cannot open %s\\n", path); return; }
@@ -104,6 +103,8 @@ static void bb_capture_fixed(const RmScene *sc, const Framebuffer *fb) {
     bb_capture_chunk(f, "BUFC", sc->objlist->buf_c,
                      RM_AUX_OFF - RM_GFX_OFF);
     bb_capture_chunk(f, "LIST", sc->obj_fixed_list, 1024);
+    /* Earlier sprite passes read this separate display stream. */
+    bb_capture_chunk(f, "SPRL", sc->obj_sprite_disp, 1024);
     bb_capture_chunk(f, "FLAG", sc->ring_st, RM_RING_ROWS * RM_RING_ROW_BYTES);
     bb_capture_chunk(f, "XOFF", sc->objlist->xoff_tbl,
                      RM_CTRL_ALLOC_BYTES - RM_CTRL_WIDTH_OFF - 2);
@@ -115,7 +116,7 @@ static void bb_capture_fixed(const RmScene *sc, const Framebuffer *fb) {
     else fprintf(stderr, "GANTRY CAPTURE: %s\\n", path);
 }
 #else
-#define bb_capture_fixed(sc, fb) ((void)0)
+#define bb_capture_state(sc, fb, frame, suffix) ((void)0)
 #endif
 
 /* UNIFIED ST/STE binary (PERF30 C5 slice 1): route the road fine-scroll through rm_blit_road_scroll_fn —
@@ -132,6 +133,10 @@ static void bb_capture_fixed(const RmScene *sc, const Framebuffer *fb) {
 #endif
 
 void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
+#if defined(_WIN32)
+    static unsigned bb_capture_frame;
+    ++bb_capture_frame;
+#endif
 #if defined(_WIN32) && defined(BB_TRACE_GANTRY)
     ++bb_frame;
 #endif
@@ -177,6 +182,8 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
      * walk the serialized grid from row 1, the fixed pass from row 12 — the same aliasing the original
      * gets from pointing into its flat row grid. */
     int count = rm_ring_sprite_count(sc->ring);
+    /* Capture the input to pass 1 before any variable-object drawing. */
+    bb_capture_state(sc, fb, bb_capture_frame, "pre_objects");
     BB_BEFORE();
     if (count - 1 >= 0)                               /* pass 1: the active sprite rows */
         rm_draw_object_list(objlist, sc->obj_sprite_disp, 0,
@@ -196,7 +203,7 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
                             (uint16_t)(GOBJ_D6_INIT - count * GOBJ_D6_ROW_STEP), 0);
     BB_AFTER("object_pass_2");
     if ((objlist->view_flags & GOBJ_VIEW_REAR) == 0) {   /* pass 3 (fixed) + buggy, view-ordered */
-        bb_capture_fixed(sc, fb);
+        bb_capture_state(sc, fb, bb_capture_frame, "pre_fixed");
         BB_FIXED_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
