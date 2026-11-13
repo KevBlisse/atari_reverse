@@ -17,6 +17,9 @@
  * player.c / geometry.c.
  */
 #include <string.h>
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#include <stdio.h>
+#endif
 
 #include "dash_const.h"   /* ARENA_ROW_STRIDE / DASH_ROWS / DASH_GROUPS / RM_DASH_SRC_OFF — shared with the HUD */
 #include "game.h"
@@ -529,11 +532,59 @@ static void draw_checkpoint_anim(RmEventCtx *c) {
                                                                 * shape differs: src at tbl+0, dst at tbl+2) */
     uint8_t *src = src_base + sx16(be16(tbl));
     uint8_t *dst = dst_base + sx16(be16(tbl + 2));
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+    /* Diagnostic only: compare group-12 destination bytes immediately around the real copy.
+     * Source-envelope membership is a conservative hypothesis (P24 src=0x8A20,
+     * cells 3/4, 43 backward rows, 12 bytes/row), NOT a proven read footprint. */
+    static unsigned ckpt_g12_calls;
+    unsigned changed = 0, envelope_bytes = 0, envelope_changed = 0;
+    unsigned samples = 0;
+    char details[512];
+    size_t detail_len = 0;
+    details[0] = 0;
+#endif
     for (int r = 0; r <= CKPT_B3_ROWS_M1; r++, src += CKPT_STRIDE, dst += CKPT_STRIDE) {
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+        uint8_t before[12];
+        memcpy(before, dst, sizeof before);
+#endif
         wr32(dst, be32(src));
         wr32(dst + 4, be32(src + 4));
         wr32(dst + 8, be32(src + 8));
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+        for (unsigned b = 0; b < 12; ++b) {
+            unsigned off = (unsigned)(dst + b - c->gfx);
+            int in_envelope = 0;
+            for (unsigned cell = 3; cell <= 4; ++cell) {
+                unsigned base = 0x8a20u + cell * 12u;
+                for (unsigned sr = 0; sr < 43; ++sr) {
+                    unsigned row_start = base - sr * 0x50u;
+                    if (off >= row_start && off < row_start + 12u) in_envelope = 1;
+                }
+            }
+            envelope_bytes += (unsigned)in_envelope;
+            if (before[b] != dst[b]) {
+                ++changed;
+                envelope_changed += (unsigned)in_envelope;
+                if (samples < 12) {
+                    int n = snprintf(details + detail_len, sizeof details - detail_len,
+                                     " %05X:%02X>%02X%s", off, before[b], dst[b],
+                                     in_envelope ? "*" : "");
+                    if (n > 0 && (size_t)n < sizeof details - detail_len) detail_len += (size_t)n;
+                    ++samples;
+                }
+            }
+        }
+#endif
     }
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+    ++ckpt_g12_calls;
+    if (ckpt_g12_calls <= 100 || envelope_changed != 0)
+        fprintf(stderr,
+                "CKPT G12 call=%u digit=%c scroll=%d changed=%u envelope=%u envelope_changed=%u samples:%s\\n",
+                ckpt_g12_calls, c->hud_text[RM_HUD_SCORE_STR_OFF + 1], (int)scroll,
+                changed, envelope_bytes, envelope_changed, details);
+#endif
 }
 
 /* ---- sections G / H / I (recreate game_update_fx_and_events @0x118b6) ---- */
