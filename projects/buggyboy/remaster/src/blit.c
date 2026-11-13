@@ -211,7 +211,7 @@ ObjshCursor objsh_row(ObjshCursor cur, enum objsh_family fam, int straddle,
  * the allocator lever without touching objshift2. Byte-identical (register choice is semantically
  * transparent) — pinned by test/test_blit_engines.py + run_golden.py. Keep paired with -O3 in
  * build_game.sh / bench_build.sh. See PERF30.md "GCC-level sweep". */
-__attribute__((optimize("-fira-region=one", "-fira-algorithm=priority")))
+RM_OBJSHIFT_OPTIMIZE
 void rm_blit_objshift(uint8_t *dst, Offset dst_off, const uint8_t *src, uint32_t src_off,
                       uint16_t x, uint16_t color, uint16_t rows_m1, int16_t stride,
                       const uint8_t *color_pairs, int base_cells) {
