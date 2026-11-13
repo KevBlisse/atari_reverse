@@ -518,7 +518,27 @@ static const uint8_t *ckpt_anim_block(uint8_t *src_base, uint8_t *dst_base,
     return tbl;
 }
 
+/* Windows-only isolation test: suppress writes from the checkpoint banner
+ * animation while leaving the checkpoint event, score and HUD state intact.
+ * Default remains the original implementation. This is NOT a permanent fix:
+ * it determines whether this writer causes the P24 graphics corruption. */
+#if defined(_WIN32)
+#include <stdlib.h>
+#include <string.h>
+static int bb_skip_ckpt_anim(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        const char *v = getenv("BB_SKIP_CKPT_ANIM");
+        cached = v && strcmp(v, "1") == 0 ? 1 : 0;
+    }
+    return cached;
+}
+#endif
+
 static void draw_checkpoint_anim(RmEventCtx *c) {
+#if defined(_WIN32)
+    if (bb_skip_ckpt_anim()) return;
+#endif
     uint8_t *dst_base = c->gfx + CKPT_BASE_OFF;
     int16_t scroll = (int16_t)c->ev->ckpt_scroll;
     uint8_t *src_base = dst_base;
