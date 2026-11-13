@@ -581,7 +581,7 @@ static void draw_checkpoint_anim(RmEventCtx *c) {
     ++ckpt_g12_calls;
     if (ckpt_g12_calls <= 100 || envelope_changed != 0)
         fprintf(stderr,
-                "CKPT G12 call=%u digit=%c scroll=%d changed=%u envelope=%u envelope_changed=%u samples:%s\\n",
+                "CKPT G12 call=%u digit=%c scroll=%d changed=%u envelope=%u envelope_changed=%u samples:%s\n",
                 ckpt_g12_calls, c->hud_text[RM_HUD_SCORE_STR_OFF + 1], (int)scroll,
                 changed, envelope_bytes, envelope_changed, details);
 #endif
