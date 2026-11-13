@@ -825,6 +825,41 @@ def compare_object_list(lib, image):
     return diff, footprint
 
 
+def compare_fixed_object_pass(lib, image):
+    """Compare the *single fixed-object pass* at the supplied pre-pass state.
+
+    Unlike compare_object_list, this does not replay the earlier sprite passes:
+    the caller must provide the framebuffer exactly as it was immediately
+    before the fixed pass. This isolates the gantry renderer from other writers.
+    Returns (different framebuffer bytes, bytes changed by reference).
+    """
+    assert len(image) == bench_frame.IMAGE_SIZE
+    flip = _r16(image, adapter.A_flip_idx)
+    draw_buf = int.from_bytes(
+        image[adapter.A_physbase_tbl + flip:adapter.A_physbase_tbl + flip + 4], "big")
+    _count, passes = _objlist_passes(image)
+    list_off, flags_off, outer, rec_off, colour = passes[2]
+    base = bytes(image[adapter.SCREEN_BASE:adapter.SCREEN_BASE + adapter.SCREEN_BYTES])
+
+    ref = bytearray(image)
+    ref_buf = (ctypes.c_uint8 * bench_frame.IMAGE_SIZE).from_buffer(ref)
+    fn = bench_frame.harness._lib.g_draw_object_list
+    fn.argtypes = [ctypes.POINTER(ctypes.c_uint8)] + [ctypes.c_uint32] * 6
+    fn.restype = None
+    fn(ref_buf, list_off, flags_off, draw_buf, outer, rec_off, colour)
+    ref_fb = bytes(ref[adapter.SCREEN_BASE:adapter.SCREEN_BASE + adapter.SCREEN_BYTES])
+
+    cand = bytearray(image)
+    cand_buf = (ctypes.c_uint8 * bench_frame.IMAGE_SIZE).from_buffer(cand)
+    ctx = _objlist_ctx(lib, cand_buf, draw_buf)
+    lib.rm_draw_object_list(ctypes.byref(ctx), cand_buf, list_off, cand_buf,
+                            flags_off, outer, rec_off, colour)
+    cand_fb = bytes(cand[adapter.SCREEN_BASE:adapter.SCREEN_BASE + adapter.SCREEN_BYTES])
+
+    return (sum(a != b for a, b in zip(ref_fb, cand_fb)),
+            sum(a != b for a, b in zip(base, ref_fb)))
+
+
 # ---- gobj_prefix (draw_game_objects state advance, off-frame) ----
 # The prefix writes no pixels; it advances counters + mutates two arenas (the marker-decay records
 # and the buf_a anim-word mirrors) and the animated colour. We drive recreate's g_draw_game_objects_
