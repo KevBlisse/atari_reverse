@@ -31,18 +31,22 @@ static unsigned bb_frame;
 static void bb_snapshot(const Framebuffer *fb) { memcpy(bb_before, fb->px, SCREEN_BYTES); }
 static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
     unsigned changed = 0, first = SCREEN_BYTES, last = 0;
+    /* Only the fixed-object pass can isolate the checkpoint gantry writer. */
+    if (strcmp(stage, "fixed_objects") != 0 || bb_frame < 1300 || bb_frame > 1600)
+        return;
     for (unsigned y = BB_GANTRY_Y0; y <= BB_GANTRY_Y1 && y < SCREEN_H; ++y)
         for (unsigned g = BB_GANTRY_X0 / 16; g <= BB_GANTRY_X1 / 16 && g < SCREEN_W / 16; ++g)
             for (unsigned b = 0; b < 8; ++b) {
                 unsigned off = y * SCREEN_ROW_BYTES + g * 8 + b;
                 if (bb_before[off] == fb->px[off]) continue;
-                if (changed < 16)
+                if (changed < 3)
                     fprintf(stderr, "  off=%u y=%u xgroup=%u %02X->%02X\n",
                             off, y, g, bb_before[off], fb->px[off]);
                 if (off < first) first = off;
                 if (off > last) last = off;
                 ++changed;
             }
+    if (!changed || (bb_frame % 5 != 0 && bb_frame != 1384)) return;
     fprintf(stderr, "[GANTRY] frame=%u stage=%s p24=%02X changed=%u first=%u last=%u\n",
             bb_frame, stage, p24, changed, changed ? first : 0, changed ? last : 0);
 }
