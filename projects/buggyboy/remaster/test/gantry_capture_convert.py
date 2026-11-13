@@ -23,7 +23,7 @@ def write(b, off, payload):
 
 def read_bundle(path):
     raw = Path(path).read_bytes()
-    if raw[:8] != b"BBCAP01\\0":
+    if raw[:8] != b"BBCAP01\x00":
         raise ValueError("not a BBCAP01 bundle")
     sections = {}
     pos = 8
