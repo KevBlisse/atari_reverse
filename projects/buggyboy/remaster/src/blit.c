@@ -13,6 +13,13 @@
 #include "game.h"
 #include "screen.h"
 #include "st.h"
+#if defined(_MSC_VER)
+#define RM_ALWAYS_INLINE __forceinline
+#define RM_OBJSHIFT_OPTIMIZE
+#else
+#define RM_ALWAYS_INLINE inline __attribute__((always_inline))
+#define RM_OBJSHIFT_OPTIMIZE __attribute__((optimize("-fira-region=one", "-fira-algorithm=priority")))
+#endif
 #include "blit_const.h"   /* OBJSH_CELL_BYTES / OBJSH2_* — shared with src/asm/objshift2.S (F11) */
 
 /* MEASUREMENT ONLY (1 MB memory-diet slice 1, tools/reach_probe.c): shadow the two destination-write
@@ -105,7 +112,7 @@ typedef struct { uint8_t *col0, *col1; const uint8_t *sp; } ObjshCursor;
  * colour fill, drop the low half into col1 and the high half into col0. Split out so the 4-plane
  * unroll in objsh_straddle_cell is straight-line (PERF30 P2) — no loop counter, no per-plane branch.
  * always_inline so the value-passed cursor stays register-resident across the four calls (A1). */
-static inline __attribute__((always_inline))
+static RM_ALWAYS_INLINE
 ObjshCursor objsh_straddle_plane(ObjshCursor cur, unsigned shl,
                                  uint16_t mask_hi, uint16_t mask_lo, ObjshFill fill, int plane) {
     uint16_t f = fill.plane[plane];
@@ -125,7 +132,7 @@ ObjshCursor objsh_straddle_plane(ObjshCursor cur, unsigned shl,
  * Planes unrolled (PERF30 P2); plane 3 applies the transparency special case (~mask) inline.
  * always_inline (matching objsh_edge_cell): a second call site or compiler bump must not flip GCC's
  * called-once heuristic and reintroduce a real call that re-spills the value-passed cursor. */
-static inline __attribute__((always_inline))
+static RM_ALWAYS_INLINE
 ObjshCursor objsh_straddle_cell(ObjshCursor cur, unsigned shl, ObjshFill fill) {
     uint32_t mask32 = rotl32(objsh_build_mask_p(cur.sp), shl);
     uint16_t mask_hi = (uint16_t)(mask32 >> OBJSH_SUBPX_BITS);   /* col0 */
@@ -141,7 +148,7 @@ ObjshCursor objsh_straddle_cell(ObjshCursor cur, unsigned shl, ObjshFill fill) {
  * source word right and walks col0; LEFT shifts left and walks col1 (is_right is a compile-time
  * constant at each call site, so the ternaries fold). Split out for the same straight-line 4-plane
  * unroll as the straddle cell (PERF30 P2). */
-static inline __attribute__((always_inline))
+static RM_ALWAYS_INLINE
 ObjshCursor objsh_edge_plane(ObjshCursor cur, unsigned shift,
                              int is_right, uint16_t mask, ObjshFill fill, int plane) {
     uint16_t f = fill.plane[plane];
@@ -160,7 +167,7 @@ ObjshCursor objsh_edge_plane(ObjshCursor cur, unsigned shift,
  * for LEFT, lsr.l shr for RIGHT); low word gates the column. Planes unrolled (PERF30 P2), plane 3
  * inline. always_inline: it has two call sites, so GCC's size heuristic leaves it a real call
  * otherwise — which re-spills the cursor across the call and defeats the register-pinning. */
-static inline __attribute__((always_inline))
+static RM_ALWAYS_INLINE
 ObjshCursor objsh_edge_cell(ObjshCursor cur, unsigned shift, int is_right, ObjshFill fill) {
     uint32_t m32 = objsh_build_mask_p(cur.sp);
     uint16_t mask = (uint16_t)(is_right ? (m32 >> shift) : rotl32(m32, shift));
@@ -175,7 +182,7 @@ enum objsh_family { OBJSH_CLIP, OBJSH_BASE, OBJSH_LEFT, OBJSH_RIGHT };
 
 /* always_inline (like the cell helpers): keeps the value-passed cursor register-resident across the
  * row body instead of re-spilling it around a real call if GCC's heuristic ever demotes this. */
-static inline __attribute__((always_inline))
+static RM_ALWAYS_INLINE
 ObjshCursor objsh_row(ObjshCursor cur, enum objsh_family fam, int straddle,
                       unsigned shl, unsigned shr, ObjshFill fill) {
     if (fam == OBJSH_LEFT) {
@@ -289,7 +296,7 @@ void rm_blit_objshift(uint8_t *dst, Offset dst_off, const uint8_t *src, uint32_t
  * trips GCC's called-more-than-once heuristic into emitting a real call — and a real call spills the
  * by-pointer (uint8_t **) cursor args to memory (the A1 wall). Forcing the three straight-line inlined
  * copies is the whole point of C1 (no per-cell loop control), so pin the inline. */
-static inline __attribute__((always_inline))
+static RM_ALWAYS_INLINE
 void objsh2_straddle_cell(uint8_t **col0, uint8_t **col1, const uint8_t **sp, unsigned shl) {
     uint16_t w0 = be16(*sp);
     uint16_t w1 = be16(*sp + 2);
