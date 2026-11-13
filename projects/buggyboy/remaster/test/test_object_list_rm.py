@@ -11,6 +11,9 @@ The remaster dispatcher is pointer-independent (arena pointers + arena-relative 
 drives it on a view of recreate's flat image (every arena pointer = the image base) so the exact
 per-frame streams/records/jump-table are exercised — see equiv.compare_object_list.
 """
+import os
+from pathlib import Path
+
 import equiv
 import pytest
 
@@ -28,3 +31,31 @@ def test_draw_object_list_matches(leg, warmup, capsys):
         print(f"  leg={leg} warmup={warmup}: footprint={footprint} diff={diff}")
     assert footprint > 0, f"draw_object_list drew nothing (leg={leg}, warmup={warmup})"
     assert diff == 0, f"draw_object_list differs from recreate in {diff} bytes (leg={leg}, warmup={warmup})"
+
+
+def test_first_gantry_approach_matches_recreate(capsys):
+    """Differential check of the actual failing approach, not a synthetic warmup.
+
+    BB_GANTRY_STATE must point to a *recreate-format* 1 MiB flat memory image
+    captured immediately before the object-list drawing passes at the first
+    finishing straight (the state in which the Windows build shows LEG 4).
+    It must include graphics, object records, display lists, and screen state.
+    A Windows framebuffer dump alone is NOT a valid input: the reference
+    renderer needs the original Atari address-space image.
+    """
+    filename = os.environ.get("BB_GANTRY_STATE")
+    if not filename:
+        pytest.skip("Set BB_GANTRY_STATE to a captured 1 MiB pre-object-list Atari image")
+    image = Path(filename).read_bytes()
+    assert len(image) == equiv.bench_frame.IMAGE_SIZE, (
+        f"Expected a full {equiv.bench_frame.IMAGE_SIZE}-byte Atari memory image, "
+        f"got {len(image)} bytes; a framebuffer-only capture cannot be compared"
+    )
+    lib = equiv._lib()
+    diff, footprint = equiv.compare_object_list(lib, bytearray(image))
+    with capsys.disabled():
+        print(f"  first-gantry approach: footprint={footprint} diff={diff}")
+    assert footprint > 0, "The captured state produced no object pixels; check capture timing"
+    assert diff == 0, (
+        f"First-gantry object-list rendering differs from recreate in {diff} framebuffer bytes"
+    )
