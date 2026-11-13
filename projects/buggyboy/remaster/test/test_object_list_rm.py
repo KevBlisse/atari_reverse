@@ -59,3 +59,24 @@ def test_first_gantry_approach_matches_recreate(capsys):
     assert diff == 0, (
         f"First-gantry object-list rendering differs from recreate in {diff} framebuffer bytes"
     )
+
+
+def test_first_gantry_fixed_pass_matches_recreate(capsys):
+    """The exact gantry pass, using a pre-fixed-pass Atari-format capture.
+
+    This is intentionally distinct from BB_GANTRY_STATE, which is the earlier
+    pre-object-list snapshot used by test_first_gantry_approach_matches_recreate.
+    Do not feed a Windows-native struct dump or a framebuffer-only file here.
+    """
+    filename = os.environ.get("BB_GANTRY_FIXED_STATE")
+    if not filename:
+        pytest.skip("Set BB_GANTRY_FIXED_STATE to a 1 MiB pre-fixed-pass Atari image")
+    image = Path(filename).read_bytes()
+    assert len(image) == equiv.bench_frame.IMAGE_SIZE, (
+        f"Expected {equiv.bench_frame.IMAGE_SIZE} bytes, got {len(image)}"
+    )
+    diff, footprint = equiv.compare_fixed_object_pass(equiv._lib(), bytearray(image))
+    with capsys.disabled():
+        print(f"  first-gantry fixed pass: footprint={footprint} diff={diff}")
+    assert footprint > 0, "Fixed-object pass did not draw; check capture timing and view"
+    assert diff == 0, f"First-gantry fixed pass differs in {diff} framebuffer bytes"
