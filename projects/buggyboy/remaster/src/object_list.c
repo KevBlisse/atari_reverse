@@ -297,9 +297,33 @@ static void objshift2_glue(const ObjListCtx *c, uint16_t x, uint16_t rows, uint3
                           (uint16_t)(x + OBJSH2P_SUBCELL_X * i), rows, /*width_idx=*/0);
 }
 
+/* Windows-only P24 A/B experiment. Default is byte-for-byte the original
+ * selection. Set BB_P24_PATH=special or standard before launching to isolate
+ * the branch choice without changing checkpoint state or sprite source data.
+ * Cached once: no environment lookup in the per-object rendering hot path. */
+#if defined(_WIN32)
+#include <stdlib.h>
+#include <string.h>
+static int bb_p24_test_path(void) {
+    static int selected = -1;
+    if (selected < 0) {
+        const char *value = getenv("BB_P24_PATH");
+        selected = value && strcmp(value, "special") == 0 ? 1 :
+                   value && strcmp(value, "standard") == 0 ? 2 : 0;
+    }
+    return selected;
+}
+#endif
+
 static void obj_handler_p24(const ObjListCtx *c, uint16_t x, uint16_t rows_m1, uint32_t src) {
     uint32_t dp = objshift2_prefix_dst(c, rows_m1);
-    if (c->p24_flag == OBJ_P24_FLAG_ON) {
+    int use_special = c->p24_flag == OBJ_P24_FLAG_ON;
+#if defined(_WIN32)
+    const int test_path = bb_p24_test_path();
+    if (test_path != 0)
+        use_special = test_path == 1;
+#endif
+    if (use_special) {
         RM_BLIT_OBJSHIFT2(c->px, dp, c->buf_c, src, x, OBJ_P24_ROWS_M1, /*width_idx=*/0);   /* stage 1 */
         uint16_t x2 = (uint16_t)(OBJSH2P_SUBCELL_X + x);
         uint32_t src2 = OBJ_P24_SRC2_OFF;
