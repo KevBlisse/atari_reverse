@@ -31,8 +31,8 @@ static unsigned bb_frame;
 static void bb_snapshot(const Framebuffer *fb) { memcpy(bb_before, fb->px, SCREEN_BYTES); }
 static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
     unsigned changed = 0, first = SCREEN_BYTES, last = 0;
-    /* Only the fixed-object pass can isolate the checkpoint gantry writer. */
-    if (strcmp(stage, "fixed_objects") != 0 || bb_frame < 1300 || bb_frame > 1600)
+    /* Observe every drawing stage: do not assume the gantry uses fixed_objects. */
+    if (bb_frame < 1300 || bb_frame > 1600)
         return;
     for (unsigned y = BB_GANTRY_Y0; y <= BB_GANTRY_Y1 && y < SCREEN_H; ++y)
         for (unsigned g = BB_GANTRY_X0 / 16; g <= BB_GANTRY_X1 / 16 && g < SCREEN_W / 16; ++g)
@@ -50,8 +50,8 @@ static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
     fprintf(stderr, "[GANTRY] frame=%u stage=%s p24=%02X changed=%u first=%u last=%u\n",
             bb_frame, stage, p24, changed, changed ? first : 0, changed ? last : 0);
 }
-#define BB_BEFORE() ((void)0)
-#define BB_FIXED_BEFORE() do { if (bb_frame >= 1300 && bb_frame <= 1600) bb_snapshot(fb); } while (0)
+#define BB_BEFORE() do { if (bb_frame >= 1300 && bb_frame <= 1600) bb_snapshot(fb); } while (0)
+#define BB_FIXED_BEFORE() BB_BEFORE()
 #define BB_AFTER(name) bb_diff(fb, name, objlist->p24_flag)
 #else
 #define BB_BEFORE() ((void)0)
