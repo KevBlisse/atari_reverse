@@ -10,6 +10,50 @@
  */
 #include "game.h"
 
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#include <stdio.h>
+#include <string.h>
+/* Default: full screen. Set these defines to focus on the gantry rectangle. */
+#ifndef BB_GANTRY_X0
+#define BB_GANTRY_X0 0
+#endif
+#ifndef BB_GANTRY_X1
+#define BB_GANTRY_X1 319
+#endif
+#ifndef BB_GANTRY_Y0
+#define BB_GANTRY_Y0 0
+#endif
+#ifndef BB_GANTRY_Y1
+#define BB_GANTRY_Y1 199
+#endif
+static uint8_t bb_before[SCREEN_BYTES];
+static unsigned bb_frame;
+static void bb_snapshot(const Framebuffer *fb) { memcpy(bb_before, fb->px, SCREEN_BYTES); }
+static void bb_diff(const Framebuffer *fb, const char *stage, unsigned p24) {
+    unsigned changed = 0, first = SCREEN_BYTES, last = 0;
+    for (unsigned y = BB_GANTRY_Y0; y <= BB_GANTRY_Y1 && y < SCREEN_H; ++y)
+        for (unsigned g = BB_GANTRY_X0 / 16; g <= BB_GANTRY_X1 / 16 && g < SCREEN_W / 16; ++g)
+            for (unsigned b = 0; b < 8; ++b) {
+                unsigned off = y * SCREEN_ROW_BYTES + g * 8 + b;
+                if (bb_before[off] == fb->px[off]) continue;
+                if (changed < 16)
+                    fprintf(stderr, "  off=%u y=%u xgroup=%u %02X->%02X\n",
+                            off, y, g, bb_before[off], fb->px[off]);
+                if (off < first) first = off;
+                if (off > last) last = off;
+                ++changed;
+            }
+    fprintf(stderr, "[GANTRY] frame=%u stage=%s p24=%02X changed=%u first=%u last=%u\n",
+            bb_frame, stage, p24, changed, changed ? first : 0, changed ? last : 0);
+}
+#define BB_BEFORE() bb_snapshot(fb)
+#define BB_AFTER(name) bb_diff(fb, name, objlist->p24_flag)
+#else
+#define BB_BEFORE() ((void)0)
+#define BB_AFTER(name) ((void)0)
+#endif
+
+
 /* UNIFIED ST/STE binary (PERF30 C5 slice 1): route the road fine-scroll through rm_blit_road_scroll_fn —
  * a function pointer bound ONCE at boot (rm_blit_bind_all) to the hardware-blitter dispatch when a
  * blitter is present, else left at the C reference. The seam lives HERE, at the sole call site, and not
@@ -24,6 +68,9 @@
 #endif
 
 void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+    ++bb_frame;
+#endif
     GobjPrefixState *pfx = sc->pfx;
     ObjListCtx *objlist = sc->objlist;
 
@@ -43,8 +90,8 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
      * the original (obj_xoff_tbl == road_width_tbl + 2), so rebind it to this frame's ctrl. */
     objlist->xoff_tbl = sc->ctrl + RM_CTRL_WIDTH_OFF + 2;
     sc->scroll->seg_head = sc->pose->seg_head;       /* the scroll step follows the near slope */
-    rm_render_road(sc->road, fb);
-    RM_BLIT_ROAD_SCROLL(sc->scroll, sc->shifted, fb);
+    BB_BEFORE(); rm_render_road(sc->road, fb); BB_AFTER("road");
+    BB_BEFORE(); RM_BLIT_ROAD_SCROLL(sc->scroll, sc->shifted, fb); BB_AFTER("road_scroll");
 
     /* --- draw_game_objects tree ---
      * GAME_DUMP_STAGE (on-target debug builds only; never defined for the host lib) cuts the frame
@@ -53,11 +100,11 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
 #if defined(GAME_DUMP_STAGE) && GAME_DUMP_STAGE == 0
     return;
 #endif
-    rm_draw_ground(sc->ground, sc->ground_assets, fb);
+    BB_BEFORE(); rm_draw_ground(sc->ground, sc->ground_assets, fb); BB_AFTER("ground");
 #if defined(GAME_DUMP_STAGE) && GAME_DUMP_STAGE == 1
     return;
 #endif
-    rm_draw_fg_sprite(sc->sprite, sc->sprite_assets, fb);
+    BB_BEFORE(); rm_draw_fg_sprite(sc->sprite, sc->sprite_assets, fb); BB_AFTER("foreground");
 #if defined(GAME_DUMP_STAGE) && GAME_DUMP_STAGE == 2
     return;
 #endif
@@ -66,33 +113,41 @@ void rm_draw_frame(const RmScene *sc, Framebuffer *fb) {
      * walk the serialized grid from row 1, the fixed pass from row 12 — the same aliasing the original
      * gets from pointing into its flat row grid. */
     int count = rm_ring_sprite_count(sc->ring);
+    BB_BEFORE();
     if (count - 1 >= 0)                               /* pass 1: the active sprite rows */
         rm_draw_object_list(objlist, sc->obj_sprite_disp, 0,
                             sc->ring_st + GOBJ_SPRITE_PASS_ROW * RM_RING_ROW_BYTES, 0,
                             (uint16_t)(count - 1), GOBJ_D6_INIT, (uint16_t)count);
+    BB_AFTER("object_pass_1");
 #if defined(GAME_DUMP_STAGE) && GAME_DUMP_STAGE == 3
     return;
 #endif
-    rm_draw_object(sc->object, fb);
+    BB_BEFORE(); rm_draw_object(sc->object, fb); BB_AFTER("scaled_object");
+    BB_BEFORE();
     if (GOBJ_SPRITE_LAST - count >= 0)               /* pass 2: the remaining rows */
         rm_draw_object_list(objlist, sc->obj_sprite_disp, (uint16_t)(count * GOBJ_ROW_A5_STRIDE),
                             sc->ring_st + GOBJ_SPRITE_PASS_ROW * RM_RING_ROW_BYTES,
                             (uint16_t)(count * GOBJ_ROW_A3_STRIDE),
                             (uint16_t)(GOBJ_SPRITE_LAST - count),
                             (uint16_t)(GOBJ_D6_INIT - count * GOBJ_D6_ROW_STEP), 0);
+    BB_AFTER("object_pass_2");
     if ((objlist->view_flags & GOBJ_VIEW_REAR) == 0) {   /* pass 3 (fixed) + buggy, view-ordered */
+        BB_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
-        rm_draw_buggy(sc->sprite, sc->sprite_assets, fb);
+        BB_AFTER("fixed_objects");
+        BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
     } else {
-        rm_draw_buggy(sc->sprite, sc->sprite_assets, fb);
+        BB_BEFORE(); rm_draw_buggy(sc->sprite, sc->sprite_assets, fb); BB_AFTER("buggy");
+        BB_BEFORE();
         rm_draw_object_list(objlist, sc->obj_fixed_list, 0,
                             sc->ring_st + GOBJ_FIXED_PASS_ROW * RM_RING_ROW_BYTES, 0, 0, 0, 0);
+        BB_AFTER("fixed_objects");
     }
 
     /* Fan the flag-sequence state pfx OWNS into the HUD view (phase-4 bars + phase-5 colour cursor),
      * right before the HUD draw — the original's g_draw_game_objects-then-g_draw_hud order, and after
      * rm_gobj_prefix above (which advances these). Without it the flag bars never appear. */
     rm_gobj_hud_view(pfx, sc->hud);
-    rm_draw_hud(sc->hud, sc->hud_assets, fb);
+    BB_BEFORE(); rm_draw_hud(sc->hud, sc->hud_assets, fb); BB_AFTER("hud");
 }
