@@ -380,8 +380,9 @@ static void bb_trace_sprite_dispatch(const ObjListCtx *c, uint16_t jumpidx, uint
                                      uint16_t x, uint16_t colour, uint16_t rows,
                                      uint32_t dst, uint32_t src, uint32_t rec_cursor) {
     unsigned frame = bb_sprite_trace_frame;
-    /* Sample every tenth frame for the entire drive; no assumed crossing times. */
-    if (!bb_sprite_trace_file || (frame % 10) != 0) return;
+    /* Capture every dispatch: distance-dependent gantry stages can pass between
+     * ten-frame samples. File logging is opt-in via BB_GANTRY_SPRITE_TRACE. */
+    if (!bb_sprite_trace_file) return;
     fprintf(bb_sprite_trace_file,
             "%u,%s,%u,%u,%u,%u,0x%04X,0x%05X,0x%08X,0x%08X,%u,%u,%u,0x%08X\n",
             frame, bb_sprite_trace_pass, (unsigned)c->view_flags, (unsigned)c->p24_flag,
