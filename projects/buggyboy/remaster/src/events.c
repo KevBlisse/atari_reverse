@@ -607,6 +607,10 @@ static void draw_checkpoint_anim(RmEventCtx *c) {
 #endif
 }
 
+/* Public Atari init_leg phase-3 graphics-only operation. */
+void rm_init_leg_checkpoint_gfx(RmEventCtx *c) { draw_checkpoint_anim(c); }
+
+
 /* ---- sections G / H / I (recreate game_update_fx_and_events @0x118b6) ---- */
 
 #define FX_BLOCK_BYTES 0x30
