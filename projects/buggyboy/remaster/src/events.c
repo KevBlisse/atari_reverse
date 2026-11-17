@@ -17,7 +17,7 @@
  * player.c / geometry.c.
  */
 #include <string.h>
-#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY) && BB_TRACE_GANTRY
 #include <stdio.h>
 #endif
 
@@ -552,7 +552,7 @@ static void draw_checkpoint_anim(RmEventCtx *c) {
                                                                 * shape differs: src at tbl+0, dst at tbl+2) */
     uint8_t *src = src_base + sx16(be16(tbl));
     uint8_t *dst = dst_base + sx16(be16(tbl + 2));
-#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY) && BB_TRACE_GANTRY
     /* Diagnostic only: compare group-12 destination bytes immediately around the real copy.
      * Source-envelope membership is a conservative hypothesis (P24 src=0x8A20,
      * cells 3/4, 43 backward rows, 12 bytes/row), NOT a proven read footprint. */
@@ -564,14 +564,14 @@ static void draw_checkpoint_anim(RmEventCtx *c) {
     details[0] = 0;
 #endif
     for (int r = 0; r <= CKPT_B3_ROWS_M1; r++, src += CKPT_STRIDE, dst += CKPT_STRIDE) {
-#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY) && BB_TRACE_GANTRY
         uint8_t before[12];
         memcpy(before, dst, sizeof before);
 #endif
         wr32(dst, be32(src));
         wr32(dst + 4, be32(src + 4));
         wr32(dst + 8, be32(src + 8));
-#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY) && BB_TRACE_GANTRY
         for (unsigned b = 0; b < 12; ++b) {
             unsigned off = (unsigned)(dst + b - c->gfx);
             int in_envelope = 0;
@@ -597,7 +597,7 @@ static void draw_checkpoint_anim(RmEventCtx *c) {
         }
 #endif
     }
-#if defined(_WIN32) && defined(BB_TRACE_GANTRY)
+#if defined(_WIN32) && defined(BB_TRACE_GANTRY) && BB_TRACE_GANTRY
     ++ckpt_g12_calls;
     if (ckpt_g12_calls <= 100 || envelope_changed != 0)
         fprintf(stderr,
